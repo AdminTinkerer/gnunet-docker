@@ -12,6 +12,7 @@ RUN apt-get update && \
       autopoint \
       autoconf \
       texinfo \
+      libjansson-dev \
       libtool \
       libltdl-dev \
       libgpg-error-dev \
@@ -73,10 +74,22 @@ RUN git clone $GNURL_GIT_URL \
     cd - && \
     rm -fr /gnurl
 
+
+# Install libmicrohttpd
+
+ENV LIBMICROHTTPD_PREFIX /opt/libmicrohttpd
+
+RUN git clone https://gnunet.org/git/libmicrohttpd.git &&\
+    cd libmicrohttpd &&\
+    autoreconf -fi  &&\
+    ./configure --disable-doc --prefix="$LIBMICROHTTPD_PREFIX" &&\
+    make -j4 &&\
+    make install
+
 # Install GNUnet
 ENV GNUNET_GIT_URL https://gnunet.org/git/gnunet
 ENV GNUNET_GIT_BRANCH master
-ENV GNUNET_PREFIX /usr/local/gnunet
+ENV GNUNET_PREFIX /usr
 ENV CFLAGS '-g -Wall -O0'
 
 RUN git clone $GNUNET_GIT_URL \
@@ -88,7 +101,8 @@ RUN git clone $GNUNET_GIT_URL \
       ./configure \
         --with-nssdir=/lib \
         --prefix="$GNUNET_PREFIX" \
-        --enable-logging=verbose && \
+        --enable-logging=verbose \
+        --with-microhttpd="$LIBMICROHTTPD_PREFIX" && \
       make -j3 && \
       make install && \
       ldconfig && \
@@ -98,6 +112,10 @@ RUN git clone $GNUNET_GIT_URL \
 # Configure GNUnet
 COPY gnunet.conf /etc/gnunet.conf
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint
+
+RUN cp /usr/lib/gnunet/nss/libnss_gns.so.2 /lib/$(uname -m)-linux-gnu/ && \
+    sed -i -E 's/^(hosts:\s+files) dns/\1 gns [NOTFOUND=return] dns/' /etc/nsswitch.conf
+
 RUN chmod 755 /usr/local/bin/docker-entrypoint
 
 ENV LOCAL_PORT_RANGE='40001 40200'
